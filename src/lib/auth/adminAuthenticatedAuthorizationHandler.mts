@@ -13,7 +13,7 @@ import { Types } from 'mongoose'
 dotenv.config()
 
 /******************
- * riceve il token di refresh che possiede solo _id dell'utente, non tutte le info salvate nell'access token !
+ * receives the refresh token, which carries only the user's _id — not everything the access token holds!
  */
 
 export const adminAuthenticatedAuthorizationHandler =
@@ -23,7 +23,7 @@ export const adminAuthenticatedAuthorizationHandler =
 		/***************************
 		 * CLIENT: Invia opaque token
 		 * - in authorization: ctx.request.header.authorization =  'Bearer TOKEN_HERE
-		 * - in cookie: ctx.request.header.cookie = nome_cookie=TOKEN_HERE
+		 * - in cookie: ctx.request.header.cookie = firstName_cookie=TOKEN_HERE
 		 */
 		/*
     console.log('[authorizationAuthApiHandlerWt]')

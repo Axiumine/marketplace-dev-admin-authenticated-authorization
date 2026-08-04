@@ -55,7 +55,7 @@ describe('adminAuthenticatedAuthorizationHandler', () => {
 		expect(hGetAll).not.toHaveBeenCalled()
 	})
 
-	// No onboarding data here, unlike the imprenditore tier: an Admin is created by the platform
+	// No onboarding data here, unlike the shopOwner tier: an Admin is created by the platform
 	// operator, never onboarded, so state.user carries only _id, email and the refresh token.
 	it('builds state.user from the Redis session and the admin record', async () => {
 		hGetAll.mockResolvedValueOnce(redisSession())

@@ -104,7 +104,7 @@ async function seedAdmin(overrides: Record<string, unknown> = {}) {
 		.insertOne({
 			_id,
 			login: { email, password: PASSWORD_HASH },
-			anagrafica: { nome: 'Itest', cognome: 'Admin' },
+			personalData: { firstName: 'Itest', lastName: 'Admin' },
 			...overrides
 		})
 	seededIds.push(_id)
@@ -296,7 +296,7 @@ describe('refresh rotates the session on the cluster', () => {
 
 		// The handler rebuilt ctx.state.user out of Redis + MongoDB and the resolver strips
 		// refreshToken back off it. IRedisDataAdmin carries no onboarding fields — unlike the
-		// imprenditore tier — so the admin access hash is exactly {_id, email}.
+		// shopOwner tier — so the admin access hash is exactly {_id, email}.
 		expect(await redisClient.hGetAll(accessKey)).toEqual({ _id: _id.toHexString(), email })
 		expect(await redisClient.hGetAll(newRefreshKey)).toEqual({ _id: _id.toHexString() })
 
