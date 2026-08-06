@@ -4,7 +4,9 @@ import { throwRefreshTokenExpiredOrDeleted } from '@axiumine/koa-utils/graphQL/t
 import { verifySignedRefreshToken } from '@axiumine/koa-utils/koa/middleware/authenticatedAuthorizationHandler/verifySignedRefreshToken'
 import { IContextAuthenticatedAuthorization } from '@lib/auth/IContextAuthenticatedAuthorization.mjs'
 import { tokenInfoAdmin } from '@lib/auth/tokenInfoAdmin.mjs'
+import { assertTier } from '@thedoctorweb_agency/marketplace-common/others/assertTier'
 import { IRedisDataAdmin } from '@thedoctorweb_agency/marketplace-common/others/Redis/IRedisDataAdmin'
+import { TIER } from '@thedoctorweb_agency/marketplace-common/others/Tier'
 import * as dotenv from 'dotenv'
 import Keygrip from 'keygrip'
 import { Next } from 'koa'
@@ -37,6 +39,13 @@ export const adminAuthenticatedAuthorizationHandler =
 		if (Object.keys(redSession).length !== 0) {
 			const redData = { ...redSession } // For safety, Redis return an object without the default Object.prototype  in its prototype chain.
 
+			// All seven services share one `REDIS_KEY` prefix, so a well-formed refresh session found
+			// under this key may have been minted for another tier. Refuse it here, before the _id is
+			// looked up in the `admin` collection — that lookup used to be the only thing standing in
+			// the way, and it only ever failed by accident, when the foreign id happened not to exist.
+			// A session with no `tier` predates this check and is refused too: fail closed.
+			assertTier(redData.tier, TIER.admin)
+
 			/***************************
 			 * get info for access_token
 			 */
@@ -47,7 +56,8 @@ export const adminAuthenticatedAuthorizationHandler =
 			// this BE only save data to Redis, so we prepare ctx.state.user for Redis
 			const tokenData: IRedisDataAdmin = {
 				_id: uId,
-				email: admin.login.email
+				email: admin.login.email,
+				tier: TIER.admin
 			}
 
 			ctx.state.user = {
