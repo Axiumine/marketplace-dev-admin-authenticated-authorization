@@ -25,9 +25,9 @@ describe('start() when MongoDB refuses the connection', () => {
 	})
 
 	it('logs, tears down the datasources that did come up, and exits 1', async () => {
-		// MONGODB_URI is not even in REQUIRED_ENV_VARS for this service (see src/index.mts) — set
-		// truthy anyway so the failure happens where it is meant to, in the driver, not by accident
-		// somewhere else.
+		// Set truthy so the failure happens where it is meant to, inside MongoDBConnect()'s real
+		// driver. MONGODB_URI is in REQUIRED_ENV_VARS now, so leaving it unset would fail in the env
+		// guard instead — which is the *other* test below, and a different code path entirely.
 		process.env.MONGODB_URI = 'not-a-mongodb-uri'
 
 		const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never)

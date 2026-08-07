@@ -1,84 +1,54 @@
 import { redisClient } from '@axiumine/koa-utils/dataSources/Redis'
 import { IContextRefresh } from '@axiumine/koa-utils/graphQL/schema/context/IContextRefresh'
-import { throwRefreshTokenExpiredOrDeleted } from '@axiumine/koa-utils/graphQL/throw/throwRefreshTokenExpiredOrDeleted'
 import { verifySignedRefreshToken } from '@axiumine/koa-utils/koa/middleware/authenticatedAuthorizationHandler/verifySignedRefreshToken'
 import { IContextAuthenticatedAuthorization } from '@lib/auth/IContextAuthenticatedAuthorization.mjs'
 import { tokenInfoAdmin } from '@lib/auth/tokenInfoAdmin.mjs'
-import { assertTier } from '@thedoctorweb_agency/marketplace-common/others/assertTier'
-import { IRedisDataAdmin } from '@thedoctorweb_agency/marketplace-common/others/Redis/IRedisDataAdmin'
+import { IRedisDataAdminCommon } from '@thedoctorweb_agency/marketplace-common/others/Redis/IRedisDataAdminCommon'
+import { resolveAuthorizationSession } from '@thedoctorweb_agency/marketplace-common/others/resolveAuthorizationSession'
 import { TIER } from '@thedoctorweb_agency/marketplace-common/others/Tier'
 import * as dotenv from 'dotenv'
 import Keygrip from 'keygrip'
 import { Next } from 'koa'
-import { Types } from 'mongoose'
 
 dotenv.config()
 
 /******************
  * receives the refresh token, which carries only the user's _id — not everything the access token holds!
+ *
+ * The lookup, the tier assertion, the introspection bypass and the shape of the session are shared with
+ * the shop-owner and customer authorization services and live in `resolveAuthorizationSession`. What
+ * stays here is the only part that is genuinely this tier's: which collection the `_id` is read from.
+ * An operator's session carries the email and nothing else — no onboarding step, because an operator is
+ * created by another operator rather than walked through a signup.
  */
 
 export const adminAuthenticatedAuthorizationHandler =
 	(keys: Keygrip) => async (ctx: IContextAuthenticatedAuthorization, next: Next) => {
-		// console.log('[authorizationHandler] ')
+		const refreshToken = verifySignedRefreshToken(ctx as unknown as IContextRefresh, keys)
 
-		/***************************
-		 * CLIENT: Invia opaque token
-		 * - in authorization: ctx.request.header.authorization =  'Bearer TOKEN_HERE
-		 * - in cookie: ctx.request.header.cookie = firstName_cookie=TOKEN_HERE
-		 */
-		/*
-    console.log('[authorizationAuthApiHandlerWt]')
-    if (typeof ctx.request.header?.operation !== 'undefined') {
-    const operationName = ctx.request.header.operation
-    console.log('[authorizationHandler] operationName: ', operationName)
-    }*/
-
-		const refreshTokenRedis = verifySignedRefreshToken(ctx as unknown as IContextRefresh, keys)
-		const redSession = await redisClient.hGetAll(`${process.env.REDIS_KEY}${refreshTokenRedis}`)
-		if (Object.keys(redSession).length !== 0) {
-			const redData = { ...redSession } // For safety, Redis return an object without the default Object.prototype  in its prototype chain.
-
-			// All seven services share one `REDIS_KEY` prefix, so a well-formed refresh session found
-			// under this key may have been minted for another tier. Refuse it here, before the _id is
-			// looked up in the `admin` collection — that lookup used to be the only thing standing in
-			// the way, and it only ever failed by accident, when the foreign id happened not to exist.
-			// A session with no `tier` predates this check and is refused too: fail closed.
-			assertTier(redData.tier, TIER.admin)
-
-			/***************************
-			 * get info for access_token
-			 */
-			const uId = redData._id
-			const uIdObj = new Types.ObjectId(uId)
-			const admin = await tokenInfoAdmin(uIdObj)
-
-			// this BE only save data to Redis, so we prepare ctx.state.user for Redis
-			const tokenData: IRedisDataAdmin = {
-				_id: uId,
-				email: admin.login.email,
-				tier: TIER.admin
-			}
-
-			ctx.state.user = {
-				...tokenData,
-				refreshToken: refreshTokenRedis
-			}
-		} else {
-			// By the time control reaches this branch, verifySignedRefreshToken(ctx, keys) above has
-			// already run to completion without throwing. It reads `ctx.request.header?.cookie` and
-			// throws throwPreconditionFailedNoAuthCookie() whenever that is undefined — which happens
-			// whenever ctx.request.header itself is null/undefined (the optional chaining there
-			// short-circuits) or merely lacks a `cookie` property. So every input that reaches this
-			// branch has already proven ctx.request.header to be a defined, non-null object; the `?.`
-			// here can never observe it be otherwise. (Written as its own statement, rather than
-			// inline in the `if` test below, so the Stryker disable comment attaches to the right node.)
+		const session = await resolveAuthorizationSession<IRedisDataAdminCommon>({
+			store: redisClient,
+			refreshToken,
+			tier: TIER.admin,
+			// By the time this value is read, verifySignedRefreshToken(ctx, keys) above has already run
+			// to completion without throwing. It reads `ctx.request.header?.cookie` and throws
+			// throwPreconditionFailedNoAuthCookie() whenever that is undefined — which happens whenever
+			// ctx.request.header itself is null/undefined (the optional chaining there short-circuits)
+			// or merely lacks a `cookie` property. So every input that reaches this line has already
+			// proven ctx.request.header to be a defined, non-null object; the `?.` here can never
+			// observe it be otherwise.
 			// Stryker disable next-line OptionalChaining: header proven defined above, see argument.
-			const introspectionCode = ctx.request.header?.['x-introspectioncode']
-			if (introspectionCode !== `${process.env.INTROSPECTION_CODE}`) {
-				throw throwRefreshTokenExpiredOrDeleted()
+			introspectionCode: ctx.request.header?.['x-introspectioncode'],
+			readSessionData: async (_id) => {
+				const admin = await tokenInfoAdmin(_id)
+
+				return { email: admin.login.email }
 			}
-		} // else return next()
+		})
+
+		// `null` means the session had expired and the request carried a valid introspection code, so it
+		// goes through with no `ctx.state.user` at all — a service-to-service call has no account behind it.
+		if (session !== null) ctx.state.user = session
 
 		return next()
 	}

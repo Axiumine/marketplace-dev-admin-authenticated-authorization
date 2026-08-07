@@ -1,12 +1,42 @@
 # marketplace-dev-admin-authenticated-authorization
 
-One of the seven backend services. **Read the parent workspace's `CLAUDE.md` first** —
+One of the nine backend services. **Read the parent workspace's `CLAUDE.md` first** —
 `/media/nvme/websites/fullstack-marketplace-blueprint/CLAUDE.md`. The tier/concern split, the port table, the terminology
 mapping and the auth model live there, not here; this file carries only what is specific to this repo.
 
+## What this service is
+
+Token lifecycle for the **platform-operator** tier — `Admin`, the developer/vendor role. Port **4025**,
+endpoint `/admin-authenticated-authorization`, one mutation: `refresh`. No business queries; those live in
+`marketplace-dev-admin-authenticated-resource` (4024). Logout is not here —
+`marketplace-dev-authenticated-logout` (4030) serves all three tiers, because it deletes sessions by token
+content and never asks which collection minted them.
+
+⚠️ **Most of this service's body lives in `marketplace-common` since 4.4.0, and that is deliberate.** The
+three `*-authenticated-authorization` services were byte-identical apart from a tier constant, a model and a
+projection; on 2026-08-07 the shared part moved into `resolveAuthorizationSession`, `findAccountForSession`
+and `refreshSessionTokens` while the three services, three ports and three crash domains stayed exactly as
+they were. The survey behind that choice — including the two options that were rejected and why — is
+`docs/decisions/authorization-service-consolidation.md` in the parent workspace. **Do not re-inline the
+helpers, and do not go the other way and merge the services**: the second is a decision the user has already
+taken, against.
+
+This is the **thinnest of the three**, and the difference is not an omission:
+
+- **`TIER.admin`**, hardcoded at the one `resolveAuthorizationSession` call. A service that could be told
+  its own tier by a caller would not be asserting anything.
+- **`tokenInfoAdmin` projects `_id login.email deleted disabled` and nothing else.** An operator has no
+  onboarding to resume and no `waitApprov`, so the access-token hash is `_id`, `email`, `tier` — full stop.
+- **`IAdminEmail` is imported from `marketplace-common`**, not declared here. It was an ad-hoc inline
+  `interface` in `tokenInfoAdmin.mts` until 4.4.0; a shared reader contract needed it typed in one place.
+
+`ctx.state.user` is typed `TAuthorizationSession<IRedisDataAdminCommon>` — the helper's own return type, not
+a restatement of it. That is what lets the middleware assign the session with no cast, and what stops the
+context type and the helper drifting apart.
+
 ## Version control
 
-**git**, branch `main`, remote `origin` on GitHub under `Marketplace-Org`, private. **Never commit on
+**git**, branch `main`, **no remote** — like every other repo in this workspace. **Never commit on
 `main`** — branch first (`git switch -c <type>/<slug>`), and merging is the user's decision alone.
 
 **Delete the local branch as soon as it is merged**: `git branch -d <slug>`, in the same breath as the
