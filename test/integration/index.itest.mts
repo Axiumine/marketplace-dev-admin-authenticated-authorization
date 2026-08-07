@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net'
 
 import { redisClient } from '@axiumine/koa-utils/dataSources/Redis'
 import { REFRESH_TOKEN_EXPIRY } from '@axiumine/koa-utils/lib/tokens'
+import { TIER } from '@thedoctorweb_agency/marketplace-common/others/Tier'
 import * as dotenv from 'dotenv'
 import type { Server } from 'http'
 import Keygrip from 'keygrip'
@@ -119,7 +120,7 @@ async function seedAdmin(overrides: Record<string, unknown> = {}) {
  */
 async function expectRefreshRejected(_id: mongoose.Types.ObjectId) {
 	const refresh = randomUUID()
-	await redisClient.hSet(track(`${REDIS_KEY}refresh:${refresh}`), '_id', _id.toHexString())
+	await redisClient.hSet(track(`${REDIS_KEY}refresh:${refresh}`), { _id: _id.toHexString(), tier: TIER.admin })
 
 	const { status, json } = await gql('{ helloRefresh { txt } }', { cookie: signedCookie(refresh) })
 
@@ -225,7 +226,7 @@ describe('refresh-cookie gate over HTTP', () => {
 	it('answers 401 when the live session points at an admin MongoDB does not have', async () => {
 		const refresh = randomUUID()
 		const refreshKey = `${REDIS_KEY}refresh:${refresh}`
-		await redisClient.hSet(refreshKey, '_id', new mongoose.Types.ObjectId().toHexString())
+		await redisClient.hSet(refreshKey, { _id: new mongoose.Types.ObjectId().toHexString(), tier: TIER.admin })
 
 		try {
 			const { status, json } = await gql('{ helloRefresh { txt } }', { cookie: signedCookie(refresh) })
@@ -276,7 +277,7 @@ describe('refresh rotates the session on the cluster', () => {
 		const { _id, email } = await seedAdmin()
 		const oldRefresh = randomUUID()
 		const oldRefreshKey = track(`${REDIS_KEY}refresh:${oldRefresh}`)
-		await redisClient.hSet(oldRefreshKey, '_id', _id.toHexString())
+		await redisClient.hSet(oldRefreshKey, { _id: _id.toHexString(), tier: TIER.admin })
 
 		const { status, json, setCookie } = await gql(mutation, { cookie: signedCookie(oldRefresh) })
 
@@ -296,9 +297,9 @@ describe('refresh rotates the session on the cluster', () => {
 
 		// The handler rebuilt ctx.state.user out of Redis + MongoDB and the resolver strips
 		// refreshToken back off it. IRedisDataAdmin carries no onboarding fields — unlike the
-		// shopOwner tier — so the admin access hash is exactly {_id, email}.
-		expect(await redisClient.hGetAll(accessKey)).toEqual({ _id: _id.toHexString(), email })
-		expect(await redisClient.hGetAll(newRefreshKey)).toEqual({ _id: _id.toHexString() })
+		// shopOwner tier — so the admin access hash is exactly {_id, email, tier}.
+		expect(await redisClient.hGetAll(accessKey)).toEqual({ _id: _id.toHexString(), email, tier: TIER.admin })
+		expect(await redisClient.hGetAll(newRefreshKey)).toEqual({ _id: _id.toHexString(), tier: TIER.admin })
 
 		// Both expire() calls really ran, and ran *after* the hSet. A key whose TTL was armed
 		// before its fields would read -1 here.
