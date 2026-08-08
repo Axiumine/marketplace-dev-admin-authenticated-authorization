@@ -5,8 +5,8 @@ const lean = vi.fn()
 const findById = vi.fn(() => ({ lean }))
 const checkUserAuthorizationDisDel = vi.fn()
 
-vi.mock('@thedoctorweb_agency/marketplace-common/models/MongoDB/Admin', () => ({ Admin: { findById } }))
-vi.mock('@thedoctorweb_agency/marketplace-common/others/checkUserAuthorizationDisDel', () => ({ checkUserAuthorizationDisDel }))
+vi.mock('@axiumine/marketplace-common/models/MongoDB/Admin', () => ({ Admin: { findById } }))
+vi.mock('@axiumine/marketplace-common/others/checkUserAuthorizationDisDel', () => ({ checkUserAuthorizationDisDel }))
 
 const { tokenInfoAdmin } = await import('../src/lib/auth/tokenInfoAdmin.mts')
 
