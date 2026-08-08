@@ -3,6 +3,8 @@ import type { AddressInfo } from 'node:net'
 
 import { redisClient } from '@axiumine/koa-utils/dataSources/Redis'
 import { REFRESH_TOKEN_EXPIRY } from '@axiumine/koa-utils/lib/tokens'
+import { encryptDocument } from '@axiumine/marketplace-common/encryption/encryptDocument'
+import { ENCRYPTED_FIELDS_ADMIN, KEY_ALT_NAME_ADMIN } from '@axiumine/marketplace-common/encryption/encryptedFields'
 import { TIER } from '@axiumine/marketplace-common/others/Tier'
 import * as dotenv from 'dotenv'
 import type { Server } from 'http'
@@ -95,6 +97,10 @@ function track(key: string) {
  * the seed honest about what the server really accepts. `overrides` lets a caller add the fields
  * `checkUserAuthorizationDisDel` gates on (`deleted` is a real Date in the validator, `disabled`
  * a bool) without duplicating the base document shape.
+ *
+ * ⚠️ The personal fields go through `encryptDocument` first (ADR-029): the collection declares them
+ * `binData`, so a raw seed of plaintext is refused by the validator. `disabled` and `deleted` — the
+ * two fields every assertion below reads back — are not personal data and stay in the clear.
  */
 async function seedAdmin(overrides: Record<string, unknown> = {}) {
 	const email = `itest-${randomUUID()}@marketplace.invalid`
@@ -102,12 +108,18 @@ async function seedAdmin(overrides: Record<string, unknown> = {}) {
 
 	await db()
 		.collection('admin')
-		.insertOne({
-			_id,
-			login: { email, password: PASSWORD_HASH },
-			personalData: { firstName: 'Itest', lastName: 'Admin' },
-			...overrides
-		})
+		.insertOne(
+			await encryptDocument(
+				{
+					_id,
+					login: { email, password: PASSWORD_HASH },
+					personalData: { firstName: 'Itest', lastName: 'Admin' },
+					...overrides
+				},
+				ENCRYPTED_FIELDS_ADMIN,
+				KEY_ALT_NAME_ADMIN
+			)
+		)
 	seededIds.push(_id)
 
 	return { _id, email }
