@@ -1,6 +1,6 @@
-import { Admin } from '@thedoctorweb_agency/marketplace-common/models/MongoDB/Admin'
-import { IAdminEmail } from '@thedoctorweb_agency/marketplace-common/models/MongoDBInterfaces/IAdminEmail'
-import { findAccountForSession } from '@thedoctorweb_agency/marketplace-common/others/findAccountForSession'
+import { Admin } from '@axiumine/marketplace-common/models/MongoDB/Admin'
+import { IAdminEmail } from '@axiumine/marketplace-common/models/MongoDBInterfaces/IAdminEmail'
+import { findAccountForSession } from '@axiumine/marketplace-common/others/findAccountForSession'
 import { Types } from 'mongoose'
 
 /**
