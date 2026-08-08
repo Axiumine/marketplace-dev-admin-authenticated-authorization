@@ -1,89 +1,50 @@
 # marketplace-dev-admin-authenticated-authorization
 
-One of the nine backend services. **Read the parent workspace's `CLAUDE.md` first** —
-`/media/nvme/websites/fullstack-marketplace-blueprint/CLAUDE.md`. The tier/concern split, the port table, the terminology
-mapping and the auth model live there, not here; this file carries only what is specific to this repo.
+Backend svc 6 of 9. Admin tier, authorization concern. Port 4025, endpoint
+`/admin-authenticated-authorization`. One mutation: `refresh`.
 
-## What this service is
+**Read parent first** — `/media/nvme/websites/fullstack-marketplace-blueprint/CLAUDE.md`. Tier/concern
+split, port table, terminology, auth model live there. Not here.
 
-Token lifecycle for the **platform-operator** tier — `Admin`, the developer/vendor role. Port **4025**,
-endpoint `/admin-authenticated-authorization`, one mutation: `refresh`. No business queries; those live in
-`marketplace-dev-admin-authenticated-resource` (4024). Logout is not here —
-`marketplace-dev-authenticated-logout` (4030) serves all three tiers, because it deletes sessions by token
-content and never asks which collection minted them.
+| Need | File |
+|---|---|
+| what this svc is, consolidation history | `README.md` |
+| hook internals, gate order, node selection | `REPO.md` |
+| why the three authz svcs stay three | parent `docs/decisions/authorization-service-consolidation.md` |
 
-⚠️ **Most of this service's body lives in `marketplace-common` since 4.4.0, and that is deliberate.** The
-three `*-authenticated-authorization` services were byte-identical apart from a tier constant, a model and a
-projection; on 2026-08-07 the shared part moved into `resolveAuthorizationSession`, `findAccountForSession`
-and `refreshSessionTokens` while the three services, three ports and three crash domains stayed exactly as
-they were. The survey behind that choice — including the two options that were rejected and why — is
-`docs/decisions/authorization-service-consolidation.md` in the parent workspace. **Do not re-inline the
-helpers, and do not go the other way and merge the services**: the second is a decision the user has already
-taken, against.
+Business queries → `marketplace-dev-admin-authenticated-resource` (4024). Logout →
+`marketplace-dev-authenticated-logout` (4030), all three tiers.
 
-This is the **thinnest of the three**, and the difference is not an omission:
+## Decided, not re-openable
 
-- **`TIER.admin`**, hardcoded at the one `resolveAuthorizationSession` call. A service that could be told
-  its own tier by a caller would not be asserting anything.
-- **`tokenInfoAdmin` projects `_id login.email deleted disabled` and nothing else.** An operator has no
-  onboarding to resume and no `waitApprov`, so the access-token hash is `_id`, `email`, `tier` — full stop.
-- **`IAdminEmail` is imported from `marketplace-common`**, not declared here. It was an ad-hoc inline
-  `interface` in `tokenInfoAdmin.mts` until 4.4.0; a shared reader contract needed it typed in one place.
+⚠️ **Most of this service's body lives in `marketplace-common`, deliberately. Do not re-inline the
+helpers, and do not go the other way and merge the three authorization services into one.** The merge is
+a decision the user has already taken, against. The survey behind it, including the two rejected
+alternatives, is the decision doc named above.
 
-`ctx.state.user` is typed `TAuthorizationSession<IRedisDataAdminCommon>` — the helper's own return type, not
-a restatement of it. That is what lets the middleware assign the session with no cast, and what stops the
-context type and the helper drifting apart.
+## What is still this repo's
 
-## Version control
+- `TIER.admin` — hardcoded at the one `resolveAuthorizationSession` call. Svc that could be told its own
+  tier by a caller asserts nothing.
+- `tokenInfoAdmin` projects `_id login.email deleted disabled`, no more. Operator has no onboarding, no
+  `waitApprov` → access-token hash is `_id`, `email`, `tier`.
+- `IAdminEmail` imported from `marketplace-common`, not declared here. Shared reader contract → typed once.
+- `ctx.state.user` = `TAuthorizationSession<IRedisDataAdminCommon>` — the helper's own return type, not a
+  restatement of it. Middleware assigns with no cast; context type and helper cannot drift.
 
-**git**, branch `main`, **no remote** — like every other repo in this workspace. **Never commit on
-`main`** — branch first (`git switch -c <type>/<slug>`), and merging is the user's decision alone.
+## Rules
 
-**Delete the local branch as soon as it is merged**: `git branch -d <slug>`, in the same breath as the
-merge, not at the top of the next task. Use `-d` and never `-D` — `-d` refuses a branch whose commits
-are not already reachable from where you stand, so the safe case succeeds quietly and the unsafe one
-stops you before the work is unreachable. Merges land locally here and are pushed as `main`, so no
-forge-side "delete branch on merge" ever fires; a merged branch stays until someone removes it, and
-`git branch` is the only place in-flight work is visible in a polyrepo this size. If the branch was
-pushed too, `git push origin --delete <slug>`, and only if that push was asked for in the first place.
+- **Never commit on `main`.** Branch first: `git switch -c <type>/<slug>`. Merge = user decision alone.
+- Merged → delete branch: `git branch -d <slug>`. `-d` only. `-D` never.
+- **No remote.** Push-on-request: no `git push` unless the user asked for it in that message.
+- **Never lower a coverage or mutation threshold, and never remove a gate.** Threshold miss → write the
+  missing test. Bypasses (`SKIP_QODANA=1`, `--no-verify`) are gate removals: use only when the user says so.
+- Tabs, not spaces. eslint + prettier both enforce.
+- English only — identifiers, comments, fixtures. No exception.
 
-`git push` runs `.githooks/pre-push`, a blocking **four**-step gate: `yarn lint:check` (eslint, then
-`prettier --check`, both over the whole tree), then `yarn test:cov` (100% on every metric), then
-`yarn test:mutation` (Stryker, `thresholds.break: 100`), then Qodana (`./qodana.sh`, gated by
-`qodana.yaml`: coverage 100 total / 100 fresh, the SCA vulnerable-dependency check and the license
-audit). **Never lower a threshold** to get a push through — add the missing test. Keep the hook
-executable: git skips a non-executable hook with only a hint, so the gate disappears without ever
-failing.
+## Gates
 
-Lint is first because it is the cheapest and because it is the only one of the four that can fail on a
-file the others are perfectly happy with — the next `yarn lint` would rewrite it anyway. It was
-ungated for a long time, and so were `eslint.config.js`, `.prettierrc` and `.prettierignore`: none of
-the three was in the hook's `RELEVANT_PATHS`, so a commit touching only them skipped every gate there
-is. All three are in the filter now.
-
-`git commit` runs `.githooks/pre-commit`, which is the secret guard *and* three of those four — lint,
-coverage, Qodana. Mutation is pre-push only. Both hooks scan on purpose, and the pre-push one is not
-redundant: **`git merge --no-ff` never fires `pre-commit`** — git runs that hook for `git commit`
-only — so in the branch → commit → merge → push flow the merge commit, the one revision that actually
-reaches origin, is the single commit no pre-commit scan ever sees. Two individually clean branches can
-merge into a tree that is not.
-
-The second reason is Qodana Cloud. It files every report under the branch it was produced on, and
-pre-commit always runs on the feature branch *before* the commit exists — so a repo gated only there
-can never produce a `main`-tagged report, `main` is not offered as the project's default branch, and
-the "new problems" baseline has nothing stable to compare against. pre-push runs after the merge, on
-main, which is the revision the baseline wants. Both scans hand `qodana.sh` `SKIP_TESTS=1` so the
-coverage report the preceding gate just wrote is reused rather than regenerated with its exit code
-swallowed.
-
-Ahead of every gate the hook selects node, reading `engines.node` from `package.json` and switching via
-nvm. The gates shell out to yarn and yarn's `engines` check is a hard exit 1, so without it a push from
-a shell on the machine default node dies *before* the first gate, under that gate's banner — which is
-how a node mismatch first read as a type error. Every repo's `pre-push` carries that block, and so now
-does every `pre-commit`, since all of them run tests.
-
-Bypasses, in order of bluntness: `SKIP_QODANA=1` (scan only, coverage and mutation still gate) ·
-`git commit --no-verify` / `git push --no-verify` (the whole hook).
+commit → secret guard, lint, coverage, Qodana. push → same + mutation. All blocking. Why: `REPO.md`.
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
