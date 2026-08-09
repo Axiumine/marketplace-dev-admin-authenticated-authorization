@@ -27,11 +27,18 @@ function makeCtx(header: Record<string, string>) {
 }
 
 /** Redis returns a prototype-less object; the handler spreads it, so mimic that shape. */
-function redisSession(_id = OID, tier = 'admin') {
+function redisSession(_id = OID, tier: string | null = 'admin') {
 	// `tier` has to be here: the handler asserts it before the admin lookup, so a session without one
 	// is refused outright — which is the point of the discriminator, and why every fixture that
 	// expects to get past the guard has to carry the tier this service accepts.
-	return Object.assign(Object.create(null), { _id, tier })
+	//
+	// ⚠️ `null` means "omit the field", not "set it to undefined" — a default parameter is skipped
+	// only for `undefined`, so `redisSession(OID, undefined)` would hand back an Admin session
+	// instead of the tier-less one the fail-closed case needs.
+	const session: Record<string, string> = { _id }
+	if (tier !== null) session.tier = tier
+
+	return Object.assign(Object.create(null), session)
 }
 
 describe('adminAuthenticatedAuthorizationHandler', () => {
@@ -117,5 +124,40 @@ describe('adminAuthenticatedAuthorizationHandler', () => {
 		const ctx = makeCtx({ cookie: signedCookie(), 'x-introspectioncode': 'wrong-code' })
 
 		await expect(adminAuthenticatedAuthorizationHandler(keys)(ctx, next)).rejects.toThrow()
+	})
+
+	// ⚠️ The cross-tier boundary, and on this service the one that matters most: an operator session
+	// is the most privileged thing the platform mints. All nine services read Redis under the same
+	// `REDIS_KEY` prefix — deliberately, because the single logout service finds a session by token
+	// content alone — so a ShopOwner refresh cookie is *findable* here. `resolveAuthorizationSession`
+	// asserts the tier before the `_id` reaches Mongo, which is why every case below also checks that
+	// the lookup never ran: refusing after the read would still have leaked whether that id exists in
+	// `admin`.
+	describe('tier assertion', () => {
+		it.each([
+			['shopOwner', 'a ShopOwner refresh session'],
+			['user', 'a customer refresh session'],
+			[null, 'a session minted before the tier field existed']
+		])('refuses %s (%s)', async (tier) => {
+			hGetAll.mockResolvedValueOnce(redisSession(OID, tier))
+
+			const ctx = makeCtx({ cookie: signedCookie() })
+
+			await expect(adminAuthenticatedAuthorizationHandler(keys)(ctx, next)).rejects.toThrow()
+			expect(tokenInfoAdmin).not.toHaveBeenCalled()
+			expect(next).not.toHaveBeenCalled()
+		})
+
+		// 403, not 401 — the caller authenticated, just somewhere else. A 401 tells the client to
+		// refresh its way out, which it cannot: the refresh mints another token of the same tier.
+		it('refuses with 403, not 401', async () => {
+			hGetAll.mockResolvedValueOnce(redisSession(OID, 'shopOwner'))
+
+			await expect(
+				adminAuthenticatedAuthorizationHandler(keys)(makeCtx({ cookie: signedCookie() }), next)
+			).rejects.toMatchObject({
+				extensions: { http: { status: 403 } }
+			})
+		})
 	})
 })
