@@ -41,3 +41,7 @@ tier:
 | rules for agents working in this repo | `CLAUDE.md` |
 | git hooks, gate order, node selection | `REPO.md` |
 | the whole platform — tiers, ports, terminology | parent `CLAUDE.md` |
+
+## License
+
+GPL-3.0-or-later — see [LICENSE](./LICENSE).
