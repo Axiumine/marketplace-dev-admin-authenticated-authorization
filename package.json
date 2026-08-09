@@ -6,7 +6,7 @@
     "url": "git+ssh://git@github.com/Marketplace-Org/marketplace-dev-admin-authenticated-authorization.git"
   },
   "keywords": [],
-  "license": "UNLICENSED",
+  "license": "GPL-3.0-or-later",
   "scripts": {
     "clean": "rm -rf ./dist",
     "test": "vitest run",
