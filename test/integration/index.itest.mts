@@ -5,6 +5,7 @@ import { redisClient } from '@axiumine/koa-utils/dataSources/Redis'
 import { REFRESH_TOKEN_EXPIRY } from '@axiumine/koa-utils/lib/tokens'
 import { encryptDocument } from '@axiumine/marketplace-common/encryption/encryptDocument'
 import { ENCRYPTED_FIELDS_ADMIN, KEY_ALT_NAME_ADMIN } from '@axiumine/marketplace-common/encryption/encryptedFields'
+import { sessionKey } from '@axiumine/marketplace-common/others/sessionKeys'
 import { TIER } from '@axiumine/marketplace-common/others/Tier'
 import * as dotenv from 'dotenv'
 import type { Server } from 'http'
@@ -132,7 +133,7 @@ async function seedAdmin(overrides: Record<string, unknown> = {}) {
  */
 async function expectRefreshRejected(_id: mongoose.Types.ObjectId) {
 	const refresh = randomUUID()
-	await redisClient.hSet(track(`${REDIS_KEY}refresh:${refresh}`), { _id: _id.toHexString(), tier: TIER.admin })
+	await redisClient.hSet(track(sessionKey(`refresh:${refresh}`)), { _id: _id.toHexString(), tier: TIER.admin })
 
 	const { status, json } = await gql('{ helloRefresh { txt } }', { cookie: signedCookie(refresh) })
 
@@ -237,7 +238,7 @@ describe('refresh-cookie gate over HTTP', () => {
 	// datasources in a single request, which no unit test can do.
 	it('answers 401 when the live session points at an admin MongoDB does not have', async () => {
 		const refresh = randomUUID()
-		const refreshKey = `${REDIS_KEY}refresh:${refresh}`
+		const refreshKey = sessionKey(`refresh:${refresh}`)
 		await redisClient.hSet(refreshKey, { _id: new mongoose.Types.ObjectId().toHexString(), tier: TIER.admin })
 
 		try {
@@ -288,7 +289,7 @@ describe('refresh rotates the session on the cluster', () => {
 	it('writes the new pair, arms both TTLs, and deletes the refresh token it consumed', async () => {
 		const { _id, email } = await seedAdmin()
 		const oldRefresh = randomUUID()
-		const oldRefreshKey = track(`${REDIS_KEY}refresh:${oldRefresh}`)
+		const oldRefreshKey = track(sessionKey(`refresh:${oldRefresh}`))
 		await redisClient.hSet(oldRefreshKey, { _id: _id.toHexString(), tier: TIER.admin })
 
 		const { status, json, setCookie } = await gql(mutation, { cookie: signedCookie(oldRefresh) })
@@ -300,8 +301,8 @@ describe('refresh rotates the session on the cluster', () => {
 		// here rather than after the assertions below — a failing expect would otherwise strand the
 		// new refresh hash for its whole 90-day TTL.
 		const refreshed = json.data?.refresh as { status: boolean; accessToken: string }
-		const accessKey = track(`${REDIS_KEY}access:${refreshed.accessToken}`)
-		const newRefreshKey = track(`${REDIS_KEY}refresh:${refreshTokenFrom(setCookie)}`)
+		const accessKey = track(sessionKey(`access:${refreshed.accessToken}`))
+		const newRefreshKey = track(sessionKey(`refresh:${refreshTokenFrom(setCookie)}`))
 
 		expect(refreshed.status).toBe(true)
 		expect(refreshed.accessToken).not.toBe('')
