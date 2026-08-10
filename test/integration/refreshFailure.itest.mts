@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { redisClient, RedisConnect, RedisDisconnect } from '@axiumine/koa-utils/dataSources/Redis'
+import { sha256Hex } from '@axiumine/marketplace-common/others/sha256Hex'
 import mongoose from 'mongoose'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -33,11 +34,20 @@ import type { IContextAuthenticatedAuthorization } from '../../src/lib/auth/ICon
  * ctx, the same way the unit test does, rather than by seeding Mongo and going over HTTP.
  */
 
+/*
+ * The lineage the rotation needs before it will mint anything (E14-S01), and which the per-family rate
+ * limiter (E14-S08) counts under. Fixed rather than random so the counter this run leaves on the live
+ * cluster is a key the drain below can name — it carries an hour's TTL of its own anyway, so deleting it
+ * only stops a re-run inside the hour from inheriting this run's count.
+ */
+const FAMILY_ID = 'itest-admin-catch-arm-family'
+
 beforeAll(async () => {
 	await RedisConnect()
 })
 
 afterAll(async () => {
+	await redisClient.del(`${process.env.REDIS_KEY}rl:refresh:family:${sha256Hex(FAMILY_ID)}`).catch(() => undefined)
 	await RedisDisconnect().catch(() => undefined)
 })
 
@@ -47,7 +57,18 @@ function makeCtx(): IContextAuthenticatedAuthorization {
 	return {
 		// email left undefined on purpose (see file banner) — everything else is shaped exactly
 		// like a real session so nothing upstream of the Redis write would reject it first.
-		state: { user: { _id, email: undefined, refreshToken: `refresh:${randomUUID()}` } },
+		state: {
+			user: {
+				_id,
+				email: undefined,
+				refreshToken: `refresh:${randomUUID()}`,
+				familyId: FAMILY_ID,
+				// Now-ish and a 30-day cap: the rotation refuses a lineage it can read as expired long
+				// before it reaches the hSet this test is about.
+				originalLogin: `${Date.now()}`,
+				sessionCapDays: '30'
+			}
+		},
 		cookies: {},
 		request: { header: {} }
 	} as unknown as IContextAuthenticatedAuthorization
