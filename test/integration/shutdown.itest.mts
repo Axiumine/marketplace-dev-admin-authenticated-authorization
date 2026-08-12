@@ -10,7 +10,8 @@ import mongoose from 'mongoose'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 // Belt-and-suspenders, same reasoning as index.itest.mts: the sources call dotenv.config()
-// transitively, but this file reads KEYGRIP_KEY_* at its own top level to sign a cookie below.
+// transitively, but this file reads its own environment at top level — the signing keys themselves
+// come from ITEST_KEYGRIP_KEYS, which globalSetup seals into Redis (ADR-034).
 dotenv.config()
 
 import {
