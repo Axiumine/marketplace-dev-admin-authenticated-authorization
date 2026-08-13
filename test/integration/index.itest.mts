@@ -367,8 +367,16 @@ describe('refresh rotates the session on the cluster', () => {
 		// shopOwner tier — so the admin access hash is exactly {_id, email, tier}.
 		expect(await redisClient.hGetAll(accessKey)).toEqual({ _id: _id.toHexString(), email, tier: TIER.admin })
 		// The lineage rides through the rotation unchanged — a family or a login date minted afresh here
-		// would hand the session an unlimited life one refresh at a time.
-		expect(await redisClient.hGetAll(newRefreshKey)).toEqual({ _id: _id.toHexString(), tier: TIER.admin, ...lineage })
+		// would hand the session an unlimited life one refresh at a time — and the successor names the
+		// access token minted beside it (E14-S06), asserted as the very key read two lines above: that
+		// field is what lets the next rotation, and every logout, find the access half without being
+		// handed it in a header.
+		expect(await redisClient.hGetAll(newRefreshKey)).toEqual({
+			_id: _id.toHexString(),
+			tier: TIER.admin,
+			...lineage,
+			accessKey
+		})
 
 		// Both expire() calls really ran, and ran *after* the hSet. A key whose TTL was armed
 		// before its fields would read -1 here.
