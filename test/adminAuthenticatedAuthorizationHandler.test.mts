@@ -25,7 +25,14 @@ const tokenInfoAdmin = vi.fn()
 const sMembers = vi.fn()
 const del = vi.fn()
 
-vi.mock('@axiumine/koa-utils/dataSources/Redis', () => ({ redisClient: { hGetAll, incr, expire, ttl, sMembers, del } }))
+// The two the reuse trail adds on top of them (E17-S05) — `expire` is the third and the limiter already
+// needs it. Only a revocation the tombstone could attribute to an account reaches these.
+const lPush = vi.fn()
+const lTrim = vi.fn()
+
+vi.mock('@axiumine/koa-utils/dataSources/Redis', () => ({
+	redisClient: { hGetAll, incr, expire, ttl, sMembers, del, lPush, lTrim }
+}))
 vi.mock('@lib/auth/tokenInfoAdmin.mjs', () => ({ tokenInfoAdmin }))
 
 const { adminAuthenticatedAuthorizationHandler } = await import('../src/lib/auth/adminAuthenticatedAuthorizationHandler.mts')
@@ -95,6 +102,8 @@ describe('adminAuthenticatedAuthorizationHandler', () => {
 		// -1 is "key exists, no TTL". The limiter only reads this when repairing a window it lost.
 		ttl.mockReset().mockResolvedValue(-1)
 		sMembers.mockReset().mockResolvedValue([])
+		lPush.mockReset().mockResolvedValue(1)
+		lTrim.mockReset().mockResolvedValue('OK')
 		del.mockReset().mockResolvedValue(1)
 		tokenInfoAdmin.mockReset()
 		next = vi.fn().mockResolvedValue('next') as unknown as Next
@@ -205,6 +214,44 @@ describe('adminAuthenticatedAuthorizationHandler', () => {
 		expect(del.mock.calls).toEqual([[HASHED_KEY], ['test:some-access-key'], [FAMILY_KEY]])
 		expect(tokenInfoAdmin).not.toHaveBeenCalled()
 		expect(next).not.toHaveBeenCalled()
+		// This tombstone predates E17-S05 and names no account, so the mass logout above is revoked and left
+		// unexplained. That is the fail-soft direction on purpose: the trail never gates the revocation.
+		expect(lPush).not.toHaveBeenCalled()
+	})
+
+	/*
+	 * E17-S05 through this service's own call site. The revocation above is a mass logout an operator will
+	 * eventually have to explain, and the explanation is filed under the account the tombstone names — read
+	 * from the marker because by now the session hash the token pointed at is gone.
+	 *
+	 * ⚠️ **The line holds no token and no digest of one**, asserted here rather than only in the library: the
+	 * value written is what an operator's console renders and what a Redis dump would leak.
+	 */
+	it('files the replay on the account trail, with no token anywhere in the line', async () => {
+		hGetAll
+			.mockResolvedValueOnce({})
+			.mockResolvedValueOnce({})
+			.mockResolvedValueOnce({ familyId: LINEAGE.familyId, consumedAt: `${NOW - 60_000}`, _id: OID, tier: 'admin' })
+		sMembers.mockResolvedValueOnce([HASHED_KEY])
+
+		await expect(adminAuthenticatedAuthorizationHandler(keys)(makeCtx({ cookie: signedCookie() }), next)).rejects.toThrow()
+
+		const TRAIL_KEY = `test:reuse:admin:${OID}`
+
+		expect(lPush).toHaveBeenCalledExactlyOnceWith(
+			TRAIL_KEY,
+			JSON.stringify({
+				familyId: LINEAGE.familyId,
+				tier: 'admin',
+				accountId: OID,
+				action: 'refreshTokenReplayed',
+				at: `${NOW}`
+			})
+		)
+		// Fifty entries, thirty days: the two bounds E17-S05 states, arriving on the same append.
+		expect(lTrim).toHaveBeenCalledExactlyOnceWith(TRAIL_KEY, 0, 49)
+		expect(expire).toHaveBeenCalledWith(TRAIL_KEY, 2_592_000)
+		expect(lPush.mock.calls[0][1]).not.toContain(REFRESH)
 	})
 
 	// The other side of the same read: a token that no live session backs and no tombstone names is
