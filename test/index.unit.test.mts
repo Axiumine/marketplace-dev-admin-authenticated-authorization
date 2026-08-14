@@ -259,21 +259,34 @@ describe('process handlers', () => {
 	})
 })
 
+/*
+ * The boot fixture both `start` suites open with: every mock the entry point reaches on the way up, reset
+ * to the answer a healthy boot gives, and the env it refuses to start without. Each suite then adds the
+ * two datasource mocks it wants a different answer from — the failure path arms them per test, the success
+ * path resolves them — and the spy that is its own, which is the only part that ever differed.
+ *
+ * Shared as a call, not as a nested `beforeEach`: the two suites are siblings, so a shared hook would have
+ * to sit at file level and would then also run for the suites above that mock none of this.
+ */
+const resetStartMocks = () => {
+	captureException.mockReset()
+	MongoDBConnect.mockReset().mockResolvedValue(undefined)
+	setupFieldEncryption.mockReset().mockResolvedValue(undefined)
+	assertHashFieldTTLSupport.mockReset().mockResolvedValue(undefined)
+	loadKeygrip.mockReset().mockResolvedValue({ version: 1, fp: 'c77808de4139', keys: KEYS })
+	watchKeygrip.mockReset().mockResolvedValue(undefined)
+	subscriber.connect.mockReset().mockResolvedValue(undefined)
+	redisClient.duplicate.mockClear()
+	for (const k of REQUIRED_ENV_VARS) vi.stubEnv(k, 'x')
+}
+
 describe('start (failure path)', () => {
 	let errorLog: ReturnType<typeof vi.spyOn>
 
 	beforeEach(() => {
-		captureException.mockReset()
+		resetStartMocks()
 		disconnectAllDatabases.mockReset()
 		RedisConnect.mockReset()
-		MongoDBConnect.mockReset().mockResolvedValue(undefined)
-		setupFieldEncryption.mockReset().mockResolvedValue(undefined)
-		assertHashFieldTTLSupport.mockReset().mockResolvedValue(undefined)
-		loadKeygrip.mockReset().mockResolvedValue({ version: 1, fp: 'c77808de4139', keys: KEYS })
-		watchKeygrip.mockReset().mockResolvedValue(undefined)
-		subscriber.connect.mockReset().mockResolvedValue(undefined)
-		redisClient.duplicate.mockClear()
-		for (const k of REQUIRED_ENV_VARS) vi.stubEnv(k, 'x')
 		errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 	})
 	afterEach(() => {
@@ -381,17 +394,9 @@ describe('start (success path)', () => {
 	let listenSpy: ReturnType<typeof vi.spyOn>
 
 	beforeEach(() => {
-		captureException.mockReset()
+		resetStartMocks()
 		RedisConnect.mockReset().mockResolvedValue(undefined)
-		MongoDBConnect.mockReset().mockResolvedValue(undefined)
-		setupFieldEncryption.mockReset().mockResolvedValue(undefined)
-		assertHashFieldTTLSupport.mockReset().mockResolvedValue(undefined)
-		loadKeygrip.mockReset().mockResolvedValue({ version: 1, fp: 'c77808de4139', keys: KEYS })
-		watchKeygrip.mockReset().mockResolvedValue(undefined)
-		subscriber.connect.mockReset().mockResolvedValue(undefined)
-		redisClient.duplicate.mockClear()
 		disconnectAllDatabases.mockClear()
-		for (const k of REQUIRED_ENV_VARS) vi.stubEnv(k, 'x')
 		// listen() itself is stubbed out below, so PORT can stay the same placeholder as every
 		// other required var — no socket is ever really opened by this test.
 		listenSpy = vi.spyOn(http.Server.prototype, 'listen').mockImplementation(function (this: http.Server, ...args: unknown[]) {
