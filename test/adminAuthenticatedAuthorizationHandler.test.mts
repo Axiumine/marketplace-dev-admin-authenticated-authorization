@@ -136,11 +136,11 @@ describe('adminAuthenticatedAuthorizationHandler', () => {
 	})
 
 	// No onboarding data here, unlike the shopOwner tier: an Admin is created by the platform
-	// operator, never onboarded, so state.user carries only _id, email and the refresh token.
+	// admin, never onboarded, so state.user carries only _id, email and the refresh token.
 	// AB-01: a valid credential is accepted and the session it resolves reaches ctx.state.user
 	it('builds state.user from the Redis session and the admin record', async () => {
 		hGetAll.mockResolvedValueOnce(redisSession())
-		tokenInfoAdmin.mockResolvedValueOnce({ login: { email: 'operator@marketplace.test' } })
+		tokenInfoAdmin.mockResolvedValueOnce({ login: { email: 'admin@marketplace.test' } })
 
 		const ctx = makeCtx({ cookie: signedCookie() })
 
@@ -157,7 +157,7 @@ describe('adminAuthenticatedAuthorizationHandler', () => {
 		expect(String(tokenInfoAdmin.mock.calls[0][0])).toBe(OID)
 		expect(ctx.state.user).toEqual({
 			_id: OID,
-			email: 'operator@marketplace.test',
+			email: 'admin@marketplace.test',
 			tier: 'admin',
 			refreshToken: `refresh:${REFRESH}`,
 			...LINEAGE
@@ -219,12 +219,12 @@ describe('adminAuthenticatedAuthorizationHandler', () => {
 	})
 
 	/*
-	 * E17-S05 through this service's own call site. The revocation above is a mass logout an operator will
+	 * E17-S05 through this service's own call site. The revocation above is a mass logout an admin will
 	 * eventually have to explain, and the explanation is filed under the account the tombstone names — read
 	 * from the marker because by now the session hash the token pointed at is gone.
 	 *
 	 * ⚠️ **The line holds no token and no digest of one**, asserted here rather than only in the library: the
-	 * value written is what an operator's console renders and what a Redis dump would leak.
+	 * value written is what an admin's console renders and what a Redis dump would leak.
 	 */
 	it('files the replay on the account trail, with no token anywhere in the line', async () => {
 		hGetAll
@@ -339,7 +339,7 @@ describe('adminAuthenticatedAuthorizationHandler', () => {
 		})
 	})
 
-	// ⚠️ The cross-tier boundary, and on this service the one that matters most: an operator session
+	// ⚠️ The cross-tier boundary, and on this service the one that matters most: an admin session
 	// is the most privileged thing the platform mints. All nine services read Redis under the same
 	// `REDIS_KEY` prefix — deliberately, because the single logout service finds a session by token
 	// content alone — so a ShopOwner refresh cookie is *findable* here. `resolveAuthorizationSession`
@@ -387,7 +387,7 @@ describe('adminAuthenticatedAuthorizationHandler', () => {
 	 */
 	it('meters the attempt against the presented token before it reads the session', async () => {
 		hGetAll.mockResolvedValueOnce(redisSession())
-		tokenInfoAdmin.mockResolvedValueOnce({ login: { email: 'operator@marketplace.test' } })
+		tokenInfoAdmin.mockResolvedValueOnce({ login: { email: 'admin@marketplace.test' } })
 
 		await expect(adminAuthenticatedAuthorizationHandler(keys)(makeCtx({ cookie: signedCookie() }), next)).resolves.toBe('next')
 
@@ -422,7 +422,7 @@ describe('adminAuthenticatedAuthorizationHandler', () => {
 	it('serves the twentieth attempt of a minute', async () => {
 		incr.mockResolvedValueOnce(20)
 		hGetAll.mockResolvedValueOnce(redisSession())
-		tokenInfoAdmin.mockResolvedValueOnce({ login: { email: 'operator@marketplace.test' } })
+		tokenInfoAdmin.mockResolvedValueOnce({ login: { email: 'admin@marketplace.test' } })
 
 		await expect(adminAuthenticatedAuthorizationHandler(keys)(makeCtx({ cookie: signedCookie() }), next)).resolves.toBe('next')
 	})

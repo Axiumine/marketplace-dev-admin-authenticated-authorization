@@ -19,8 +19,8 @@ dotenv.config()
  * The lookup, the tier assertion, the introspection bypass and the shape of the session are shared with
  * the shop-owner and customer authorization services and live in `resolveAuthorizationSession`. What
  * stays here is the only part that is genuinely this tier's: which collection the `_id` is read from.
- * An operator's session carries the email and nothing else — no onboarding step, because an operator is
- * created by another operator rather than walked through a signup.
+ * An admin's session carries the email and nothing else — no onboarding step, because an admin is
+ * created by another admin rather than walked through a signup.
  */
 
 export const adminAuthenticatedAuthorizationHandler =

@@ -1,6 +1,6 @@
 # marketplace-dev-admin-authenticated-authorization
 
-Token lifecycle for the **platform-operator** tier — `Admin`, the developer/vendor role. Port **4025**,
+Token lifecycle for the **platform-admin** tier — `Admin`, the developer/vendor role. Port **4025**,
 endpoint `/admin-authenticated-authorization`, one mutation: `refresh`.
 
 No business queries live here; those are in `marketplace-dev-admin-authenticated-resource` (4024). Logout
@@ -26,7 +26,7 @@ This is the thinnest of the three, and the difference is not an omission — it 
 tier:
 
 - `TIER.admin`, hardcoded at the one `resolveAuthorizationSession` call.
-- `tokenInfoAdmin`'s projection: `_id login.email deleted disabled`, nothing else. An operator has no
+- `tokenInfoAdmin`'s projection: `_id login.email deleted disabled`, nothing else. An admin has no
   onboarding to resume and no `waitApprov`, so the access-token hash is `_id`, `email`, `tier` — full stop.
 - `IAdminEmail` is imported from `marketplace-common` rather than declared here. It was an ad-hoc inline
   `interface` in `tokenInfoAdmin.mts` until 4.4.0; a shared reader contract needed it typed in one place.
