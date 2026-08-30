@@ -20,7 +20,7 @@ describe('tokenInfoAdmin', () => {
 	})
 
 	it('returns the lean record and runs the disabled/deleted gate on it', async () => {
-		const adminData = { _id, login: { email: 'operator@marketplace.test' }, deleted: false, disabled: false }
+		const adminData = { _id, login: { email: 'admin@marketplace.test' }, deleted: false, disabled: false }
 		lean.mockResolvedValueOnce(adminData)
 
 		await expect(tokenInfoAdmin(_id)).resolves.toBe(adminData)
@@ -39,7 +39,7 @@ describe('tokenInfoAdmin', () => {
 	})
 
 	it('propagates the gate rejection for a disabled or deleted admin', async () => {
-		lean.mockResolvedValueOnce({ _id, login: { email: 'operator@marketplace.test' }, disabled: true })
+		lean.mockResolvedValueOnce({ _id, login: { email: 'admin@marketplace.test' }, disabled: true })
 		checkUserAuthorizationDisDel.mockImplementationOnce(() => {
 			throw new Error('disabled')
 		})

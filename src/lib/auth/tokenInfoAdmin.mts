@@ -4,7 +4,7 @@ import { findAccountForSession } from '@axiumine/marketplace-common/others/findA
 import { Types } from 'mongoose'
 
 /**
- * Re-reads the operator behind a refresh session. The two guards — no document, then
+ * Re-reads the admin behind a refresh session. The two guards — no document, then
  * disabled/deleted — are shared with the other two tiers and live in `findAccountForSession`; the
  * model and the projection are what this tier contributes.
  *

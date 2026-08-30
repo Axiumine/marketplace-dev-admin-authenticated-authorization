@@ -84,7 +84,7 @@ describe('checkRequiredEnv', () => {
 	 * fails later, at a request, somewhere that does not name the cause; a name added here and read
 	 * nowhere makes every environment carry a value that does nothing. A length check passes a swap and
 	 * a `toContain` passes an addition, so neither notices the change. The order is asserted too — the
-	 * boot names the *first* missing variable, and that is the one an operator goes looking for. E18-S03.
+	 * boot names the *first* missing variable, and that is the one an admin goes looking for. E18-S03.
 	 */
 	it('requires exactly these 16 variables, in this order', () => {
 		expect(REQUIRED_ENV_VARS).toStrictEqual([
@@ -148,7 +148,7 @@ describe('checkRequiredEnv', () => {
 })
 
 // The name this service writes into the keygrip holders table. Asserted as a literal because the
-// table is how an operator tells five services apart, and a row nobody recognises is worse than no row.
+// table is how an admin tells five services apart, and a row nobody recognises is worse than no row.
 describe('SERVICE_NAME', () => {
 	it('is the repository name', () => {
 		expect(SERVICE_NAME).toBe('marketplace-dev-admin-authenticated-authorization')
@@ -358,7 +358,7 @@ describe('start (failure path)', () => {
 	 * Every rotation it serves files the successor session under its account and arms an `HEXPIRE` on that
 	 * field, and Redis answers an unknown command at first use rather than at startup — so without this
 	 * refusal the process comes up green, verifies tokens all morning, and fails the first refresh by
-	 * logging the operator out of a session that was still valid.
+	 * logging the admin out of a session that was still valid.
 	 */
 	it('reports to Sentry and disconnects with code 1 when the server has no hash-field TTLs', async () => {
 		const error = new Error(

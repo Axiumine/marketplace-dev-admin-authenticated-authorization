@@ -44,7 +44,7 @@ alternatives, is the decision doc named above.
 
 - `TIER.admin` — hardcoded at the one `resolveAuthorizationSession` call. Svc that could be told its own
   tier by a caller asserts nothing.
-- `tokenInfoAdmin` projects `_id login.email deleted disabled`, no more. Operator has no onboarding, no
+- `tokenInfoAdmin` projects `_id login.email deleted disabled`, no more. Admin has no onboarding, no
   `waitApprov` → access-token hash is `_id`, `email`, `tier`.
 - `IAdminEmail` imported from `marketplace-common`, not declared here. Shared reader contract → typed once.
 - `ctx.state.user` = `TAuthorizationSession<IRedisDataAdminCommon>` — the helper's own return type, not a
