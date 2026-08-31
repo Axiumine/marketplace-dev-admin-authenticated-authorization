@@ -35,8 +35,8 @@ import type { IContextAuthenticatedAuthorization } from '../../src/lib/auth/ICon
  */
 
 /*
- * The lineage the rotation needs before it will mint anything (E14-S01), and which the per-family rate
- * limiter (E14-S08) counts under. Fixed rather than random so the counter this run leaves on the live
+ * The lineage the rotation needs before it will mint anything, and which the per-family rate
+ * limiter counts under. Fixed rather than random so the counter this run leaves on the live
  * cluster is a key the drain below can name — it carries an hour's TTL of its own anyway, so deleting it
  * only stops a re-run inside the hour from inheriting this run's count.
  */
