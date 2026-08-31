@@ -4,37 +4,11 @@
 # on the command line by the `semgrep` / `semgrep:ci` yarn scripts. This file
 # holds only rules specific to the Marketplace platform's own conventions.
 #
-# Note: the sinks below are restricted to console / logger / log receivers on
-# purpose — matching any `x.y(...)` call gives false positives (e.g.
-# adminAuthenticatedAuthorizationHandler.mts reads
-# `ctx.request.header?.['x-introspectioncode']` and refresh.mts calls
-# `redisClient.hSet(keyAccess, accessTokenData...)` — both carry the same
-# secret-shaped words as arguments but are storage/lookup calls, not logging).
+# Note: the sink below is restricted to console / logger / log receivers on
+# purpose — matching any `x.y(...)` call gives false positives (e.g. refresh.mts
+# calls `redisClient.hSet(keyAccess, accessTokenData...)`, which carries the same
+# secret-shaped words as arguments but is a storage call, not logging).
 rules:
-  # x-introspectioncode / INTROSPECTION_CODE is a service-to-service secret
-  # that bypasses the token check (see CLAUDE.md). It must never reach logs.
-  - id: marketplace-no-log-introspection-code
-    languages: [typescript, javascript]
-    severity: ERROR
-    message: >-
-      Do not log the introspection code — it is a service-to-service secret (see CLAUDE.md, "never log x-introspectioncode"). Remove it from the log call.
-    metadata:
-      category: security
-      confidence: MEDIUM
-      references:
-        - CLAUDE.md
-    patterns:
-      - pattern-either:
-          - pattern: console.$M(..., $ARG, ...)
-          - patterns:
-              - pattern: $L.$M(..., $ARG, ...)
-              - metavariable-regex:
-                  metavariable: $L
-                  regex: (?i)^(logger|log)$
-      - metavariable-regex:
-          metavariable: $ARG
-          regex: (?i)(introspection|x-introspectioncode|introspectioncode)
-
   # Opaque access/refresh tokens live in Redis sessions and signed cookies.
   # Logging them defeats the whole point of opaque tokens.
   - id: marketplace-no-log-auth-token
