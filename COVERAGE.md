@@ -70,8 +70,8 @@ MongoDBConnect()])`), because the refresh gate reads the session from Redis and 
 `admin` from MongoDB. The integration project uses the `REDIS_*` / `MONGODB_URI` values
 from `.env` (loaded by the sources' own `dotenv.config()`). It overrides only the keyspace prefix
 (`REDIS_KEY=marketplaceDev:itest:adminAuthenticatedAuthorization:`, this service's own slice of the
-ACL-allowed `marketplaceDev:itest:` namespace, isolated from the other six services' suites), `PORT=0`
-(ephemeral) and `INTROSPECTION_CODE` (so the real one is never needed by, or visible to, the suite).
+ACL-allowed `marketplaceDev:itest:` namespace, isolated from the other six services' suites) and
+`PORT=0` (ephemeral).
 Run just one side with `yarn test:unit` / `yarn test:integration`.
 
 Consequence: the coverage gate — and therefore `pre-push` and `./qodana.sh` — needs both the
@@ -134,7 +134,8 @@ this count either way.) See "Static mutants are not unkillable" below for what a
 11 killable.
 
 Everything else — the Koa auth middleware, the `refresh` resolver, the DB teardown — is fully
-mutated. Current state: **62 mutants, 62 killed, 0 survived**, ~35 s.
+mutated. Current state: **every tested mutant killed, 0 survived**, score 100.00, ~35 s. The
+instrumented total moves with the source, so read it off the run rather than from here.
 
 ### Static mutants are not unkillable
 
@@ -179,8 +180,8 @@ per-test, not from a module-level `import` at the top of the file.
 
 ### Equivalent mutants
 
-Four mutants are annotated in `src/` with `// Stryker disable next-line`, each above a comment
-carrying the reachability argument:
+Three mutants are annotated in `src/` with `// Stryker disable next-line`, each above a comment
+carrying the reachability argument, and all three are in one file:
 
 - `mutations/refresh.mts` — the initial `let status = false` and the two dead-store `= ''`
   resets in the `catch` block (`refreshToken = accessToken = ''` and the later `accessToken =
@@ -190,17 +191,6 @@ carrying the reachability argument:
   through to the `return` at the bottom of the resolver: `status` is only ever read after
   `status = true` overwrote it on the success path, and `refreshToken`/`accessToken` are never
   read again once reassigned inside `catch`.
-- `lib/auth/adminAuthenticatedAuthorizationHandler.mts` — the `?.` reading
-  `ctx.request.header?.['x-introspectioncode']` in the `else` branch (the Redis session no
-  longer exists). `verifySignedRefreshToken(ctx, keys)`, called unconditionally above, throws
-  `throwPreconditionFailedNoAuthCookie()` whenever `ctx.request.header?.cookie` is `undefined` —
-  which happens whenever `ctx.request.header` itself is `null`/`undefined` (the chaining there
-  short-circuits) or merely lacks a `cookie` property. So by the time control reaches this
-  branch, `ctx.request.header` is already proven to be a defined, non-null object; the `?.`
-  here can never observe otherwise. (The condition was pulled out into its own `const
-  introspectionCode = …` statement, rather than left inline in the `else if`, purely so the
-  Stryker disable comment attaches to the right AST node — Babel does not treat a comment before
-  `} else if (…)` as a leading comment of the nested `if`.)
 
 Do not add to this list without the same kind of argument. "I could not think of a test" is not
 an equivalence proof.
@@ -212,8 +202,8 @@ with no message/shape check) almost everywhere — `adminAuthenticatedAuthorizat
 and `tokenInfoAdmin.test.mts` assert `toHaveBeenCalledExactlyOnceWith(...)` with the exact Redis
 key / projection / argument shape, and `refresh.test.mts` asserts the exact rotated keys, TTLs and
 rollback calls. That specificity is what kept the baseline mutation score at 92.59% instead of
-much lower: only the three `refresh.mts` dead stores and the one handler `?.` survived, and all
-four turned out to be genuinely equivalent rather than missing assertions.
+much lower: only the three `refresh.mts` dead stores survived, and all three turned out to be
+genuinely equivalent rather than missing assertions.
 
 ## Running it
 

@@ -4,6 +4,11 @@ import net from 'node:net'
 
 import { MongoDBConnect, MongoDBDisconnect } from '@axiumine/koa-utils/dataSources/MongoDB'
 import { redisClient, RedisConnect } from '@axiumine/koa-utils/dataSources/Redis'
+import { encryptDocument } from '@axiumine/marketplace-common/encryption/encryptDocument'
+import { ENCRYPTED_FIELDS_ADMIN, KEY_ALT_NAME_ADMIN } from '@axiumine/marketplace-common/encryption/encryptedFields'
+import { setupFieldEncryption } from '@axiumine/marketplace-common/encryption/setupFieldEncryption'
+import { sessionKey } from '@axiumine/marketplace-common/others/sessionKeys'
+import { TIER } from '@axiumine/marketplace-common/others/Tier'
 import * as dotenv from 'dotenv'
 import Keygrip from 'keygrip'
 import mongoose from 'mongoose'
@@ -45,6 +50,8 @@ let exitSpy: ReturnType<typeof vi.spyOn>
 
 beforeAll(async () => {
 	await Promise.all([MongoDBConnect(), RedisConnect()])
+	// The seed below writes every personal field as ciphertext, and nothing can encrypt until this has run.
+	await setupFieldEncryption()
 })
 
 afterAll(async () => {
@@ -64,9 +71,9 @@ describe('production hardening actually applies to a real server', () => {
 	 *
 	 * Unlike the public tier, this service mounts adminAuthenticatedAuthorizationHandler in front of
 	 * Apollo, so an unauthenticated POST never reaches the GraphQL layer at all — it dies at the
-	 * cookie gate with 412/401 first (see index.itest.mts). bypassHeaders() is what gets a request
-	 * PAST that gate without a live Redis session, so the assertion below is really about Apollo's
-	 * validation rules and not about the auth middleware in front of them.
+	 * cookie gate with 412/401 first (see index.itest.mts). So the request below arrives with a whole
+	 * account behind it, and the assertion is really about Apollo's validation rules rather than about
+	 * the auth middleware in front of them.
 	 */
 	const keys = new Keygrip(
 		ITEST_KEYGRIP_KEYS.map((key) => key.material),
@@ -77,8 +84,51 @@ describe('production hardening actually applies to a real server', () => {
 		return `refresh_token=${refresh}; refresh_token.sig=${keys.sign(`refresh_token=${refresh}`)}`
 	}
 
-	function bypassHeaders() {
-		return { cookie: signedCookie(randomUUID()), 'x-introspectioncode': process.env.INTROSPECTION_CODE as string }
+	/**
+	 * The credentials this service accepts, and the only ones: a signed refresh cookie whose session is on
+	 * the cluster and whose `_id` names a real admin. Returns them alongside a `cleanup` that drops both
+	 * again — the drain tests below close the connections, so nothing seeded here can wait for `afterAll`.
+	 *
+	 * The document is the smallest one the collection's `$jsonSchema` accepts — `login` and `personalData`,
+	 * nothing else. Both go through `encryptDocument` (ADR-029): the validator declares the email and the
+	 * two names `binData`, so a raw seed of plaintext is refused.
+	 */
+	async function seedAuthenticatedCaller() {
+		const _id = new mongoose.Types.ObjectId()
+		const email = `itest-${randomUUID()}@marketplace.invalid`
+
+		await mongoose.connection.db!.collection('admin').insertOne(
+			await encryptDocument(
+				{
+					_id,
+					login: { email, password: `$2y$14$${'x'.repeat(53)}` },
+					personalData: { firstName: 'Itest', lastName: 'Admin' }
+				},
+				ENCRYPTED_FIELDS_ADMIN,
+				KEY_ALT_NAME_ADMIN
+			)
+		)
+
+		const refresh = randomUUID()
+		const refreshKey = sessionKey(`refresh:${refresh}`)
+		await redisClient.hSet(refreshKey, {
+			_id: _id.toHexString(),
+			tier: TIER.admin,
+			familyId: randomUUID(),
+			originalLogin: `${Date.now()}`,
+			sessionCapDays: '30'
+		})
+
+		return {
+			headers: { cookie: signedCookie(refresh) },
+			cleanup: async () => {
+				await redisClient.del(refreshKey).catch(() => undefined)
+				await mongoose.connection
+					.db!.collection('admin')
+					.deleteOne({ _id })
+					.catch(() => undefined)
+			}
+		}
 	}
 
 	it('refuses introspection when booted as production', async () => {
@@ -86,22 +136,26 @@ describe('production hardening actually applies to a real server', () => {
 		process.env.NODE_ENV = 'production'
 
 		let server: Awaited<ReturnType<typeof createServer>> | undefined
+		let caller: Awaited<ReturnType<typeof seedAuthenticatedCaller>> | undefined
 		try {
 			server = await createServer(ITEST_KEYGRIP_KEYS)
 			// ⚠️ Restored the moment the server exists, and this is load-bearing rather than tidy.
 			// `validationRules: buildValidationRules()` is evaluated once, inside createServer(), so the
-			// introspection rule this test is about is already fixed on the running Apollo — while the
-			// request below still has to get past authenticatedAuthorizationHandler, whose introspection
-			// bypass disables outside `development` and `test`. Booted as production, called as
-			// test: exactly what the test name claims, and the only way to reach the schema here without
-			// seeding an encrypted account. The bypass's own production behaviour is asserted below.
+			// introspection rule this test is about is already fixed on the running Apollo, while
+			// everything the request still has to get through — the handler, the session read, the
+			// account lookup — goes back to running the way the rest of this suite runs it. Booted as
+			// production, called as test: exactly what the test name claims.
 			process.env.NODE_ENV = realNodeEnv
 			await new Promise<void>((resolve) => server!.httpServer.listen({ port: 0 }, () => resolve()))
 			const { port } = server.httpServer.address() as AddressInfo
 
+			// Every route on this service is behind the handler, so asking Apollo anything at all means
+			// arriving with a session — there is no header that stands in for one.
+			caller = await seedAuthenticatedCaller()
+
 			const res = await fetch(`http://127.0.0.1:${port}${ENDPOINT}`, {
 				method: 'POST',
-				headers: { 'content-type': 'application/json', ...bypassHeaders() },
+				headers: { 'content-type': 'application/json', ...caller.headers },
 				body: JSON.stringify({ query: '{ __schema { queryType { name } } }' })
 			})
 			const json = (await res.json()) as { data?: unknown; errors?: Array<{ message: string }> }
@@ -110,46 +164,7 @@ describe('production hardening actually applies to a real server', () => {
 			expect(json.errors?.[0]?.message).toMatch(/introspection/i)
 		} finally {
 			process.env.NODE_ENV = realNodeEnv
-			if (server) {
-				await server.apolloServer.stop()
-				await new Promise<void>((resolve) => server!.httpServer.close(() => resolve()))
-			}
-		}
-	})
-
-	/*
-	 * The introspection bypass over real HTTP, at the comparison site all three authorization services
-	 * share. The bypass admits a request whose cookie signature is valid but whose session is gone —
-	 * the exact shape the test above relies on — and outside `development` and `test` it must stop
-	 * admitting it, answering with the 498 a caller sending no code at all already gets. The server
-	 * boots normally here: the gate is read per request, so what matters is the environment in force
-	 * when the request arrives.
-	 */
-	it('refuses the introspection bypass when the request arrives as production', async () => {
-		const realNodeEnv = process.env.NODE_ENV
-
-		let server: Awaited<ReturnType<typeof createServer>> | undefined
-		try {
-			server = await createServer(ITEST_KEYGRIP_KEYS)
-			await new Promise<void>((resolve) => server!.httpServer.listen({ port: 0 }, () => resolve()))
-			const { port } = server.httpServer.address() as AddressInfo
-
-			process.env.NODE_ENV = 'production'
-
-			const res = await fetch(`http://127.0.0.1:${port}${ENDPOINT}`, {
-				method: 'POST',
-				headers: { 'content-type': 'application/json', ...bypassHeaders() },
-				body: JSON.stringify({ query: '{ __typename }' })
-			})
-			// tdwKoaErrorHandler answers a rejected request with {message, description}; nothing of the
-			// GraphQL shape comes back, because the request never reached Apollo.
-			const json = (await res.json()) as { message?: string; data?: unknown }
-
-			expect(res.status).toBe(498)
-			expect(json.message).toBe('Invalid Token')
-			expect(json.data).toBeUndefined()
-		} finally {
-			process.env.NODE_ENV = realNodeEnv
+			await caller?.cleanup()
 			if (server) {
 				await server.apolloServer.stop()
 				await new Promise<void>((resolve) => server!.httpServer.close(() => resolve()))
