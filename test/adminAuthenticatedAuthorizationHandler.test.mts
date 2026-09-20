@@ -1,8 +1,7 @@
+import type { IContextAuthenticatedAuthorization } from '@lib/auth/IContextAuthenticatedAuthorization.mjs'
 import Keygrip from 'keygrip'
 import type { Next } from 'koa'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
-import type { IContextAuthenticatedAuthorization } from '../src/lib/auth/IContextAuthenticatedAuthorization.mts'
 
 const hGetAll = vi.fn()
 /*
@@ -271,12 +270,12 @@ describe('adminAuthenticatedAuthorizationHandler', () => {
 	// `admin`.
 	describe('tier assertion', () => {
 		it.each([
-			['shopOwner', 'a ShopOwner refresh session'],
-			['user', 'a customer refresh session'],
-			[null, 'a session minted before the tier field existed']
+			{ tier: 'shopOwner', description: 'a ShopOwner refresh session' },
+			{ tier: 'user', description: 'a customer refresh session' },
+			{ tier: null, description: 'a session minted before the tier field existed' }
 			// AB-02: a session minted for another tier is refused with 403, not 401
 			// AB-03: a session carrying no tier at all is refused — fail closed, never a wildcard
-		])('refuses %s (%s)', async (tier) => {
+		])('refuses $tier ($description)', async ({ tier }) => {
 			hGetAll.mockResolvedValueOnce(redisSession(OID, tier))
 
 			const ctx = makeCtx({ cookie: signedCookie() })
