@@ -26,6 +26,8 @@ Tier/concern split, port table, terminology, auth model live there. Not here.
 - **Never run the mutation gate by hand.** `yarn test:mutation` is hook-only — `pre-push` calls it and
   nothing else does, not to check a change and not on one file. To reproduce a survivor, apply the
   mutant by hand in the source and run `yarn test` instead.
+  ⚠️ Since ADR-055 the script has a second caller, `.github/workflows/gates.yml`, which runs it on
+  every pull request — two callers, both automated, and a hand is neither.
 - **Do not re-inline `marketplace-common`'s authorization helpers, and do not merge the three
   `*-authenticated-authorization` services into one.** Both are decisions the user has already taken,
   against — survey and rejected alternatives in the decision doc above.
