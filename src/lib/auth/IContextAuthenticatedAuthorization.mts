@@ -12,12 +12,12 @@ import { IncomingHttpHeaders } from 'http'
  * field to the session shape and this type follows it.
  */
 type IStateApi = {
-	user: TAuthorizationSession<IRedisDataAdminCommon>
+  user: TAuthorizationSession<IRedisDataAdminCommon>
 }
 export type IContextAuthenticatedAuthorization = {
-	state: IStateApi
-	cookies: ICookies
-	request: {
-		header?: TCommonHeaders & IncomingHttpHeaders
-	}
+  state: IStateApi
+  cookies: ICookies
+  request: {
+    header?: TCommonHeaders & IncomingHttpHeaders
+  }
 }

@@ -24,25 +24,25 @@ dotenv.config()
  */
 
 export const adminAuthenticatedAuthorizationHandler =
-	(keys: Keygrip) => async (ctx: IContextAuthenticatedAuthorization, next: Next) => {
-		const refreshToken = verifySignedRefreshToken(ctx as unknown as IContextRefresh, keys)
+  (keys: Keygrip) => async (ctx: IContextAuthenticatedAuthorization, next: Next) => {
+    const refreshToken = verifySignedRefreshToken(ctx as unknown as IContextRefresh, keys)
 
-		// ⚠️ **Before the session read, and that is the whole point**. This is the only limiter that
-		// ever meters a token resolving to nothing — garbage, expired, tombstoned — because the per-family one
-		// is never reached by a token that names no family. Twenty attempts a minute per token; the signature
-		// has already been checked above, so a caller with no valid cookie never gets this far either.
-		await guardRefreshAttempt(redisClient, refreshToken)
+    // ⚠️ **Before the session read, and that is the whole point**. This is the only limiter that
+    // ever meters a token resolving to nothing — garbage, expired, tombstoned — because the per-family one
+    // is never reached by a token that names no family. Twenty attempts a minute per token; the signature
+    // has already been checked above, so a caller with no valid cookie never gets this far either.
+    await guardRefreshAttempt(redisClient, refreshToken)
 
-		ctx.state.user = await resolveAuthorizationSession<IRedisDataAdminCommon>({
-			store: redisClient,
-			refreshToken,
-			tier: TIER.admin,
-			readSessionData: async (_id) => {
-				const admin = await tokenInfoAdmin(_id)
+    ctx.state.user = await resolveAuthorizationSession<IRedisDataAdminCommon>({
+      store: redisClient,
+      refreshToken,
+      tier: TIER.admin,
+      readSessionData: async (_id) => {
+        const admin = await tokenInfoAdmin(_id)
 
-				return { email: admin.login.email }
-			}
-		})
+        return { email: admin.login.email }
+      }
+    })
 
-		return next()
-	}
+    return next()
+  }

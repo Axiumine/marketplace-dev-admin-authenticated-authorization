@@ -20,5 +20,5 @@ import { Types } from 'mongoose'
  * @param _id
  */
 export async function tokenInfoAdmin(_id: Types.ObjectId): Promise<IAdminEmail> {
-	return findAccountForSession<IAdminEmail>(Admin, _id, '_id login.email deleted disabled')
+  return findAccountForSession<IAdminEmail>(Admin, _id, '_id login.email deleted disabled')
 }
