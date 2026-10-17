@@ -43,47 +43,47 @@ import type { IContextAuthenticatedAuthorization } from '../../src/lib/auth/ICon
 const FAMILY_ID = 'itest-admin-catch-arm-family'
 
 beforeAll(async () => {
-	await RedisConnect()
+  await RedisConnect()
 })
 
 afterAll(async () => {
-	await redisClient.del(`${process.env.REDIS_KEY}rl:refresh:family:${sha256Hex(FAMILY_ID)}`).catch(() => undefined)
-	await RedisDisconnect().catch(() => undefined)
+  await redisClient.del(`${process.env.REDIS_KEY}rl:refresh:family:${sha256Hex(FAMILY_ID)}`).catch(() => undefined)
+  await RedisDisconnect().catch(() => undefined)
 })
 
 function makeCtx(): IContextAuthenticatedAuthorization {
-	const _id = new mongoose.Types.ObjectId().toHexString()
+  const _id = new mongoose.Types.ObjectId().toHexString()
 
-	return {
-		// email left undefined on purpose (see file banner) — everything else is shaped exactly
-		// like a real session so nothing upstream of the Redis write would reject it first.
-		state: {
-			user: {
-				_id,
-				email: undefined,
-				refreshToken: `refresh:${randomUUID()}`,
-				familyId: FAMILY_ID,
-				// Now-ish and a 30-day cap: the rotation refuses a lineage it can read as expired long
-				// before it reaches the hSet this test is about.
-				originalLogin: `${Date.now()}`,
-				sessionCapDays: '30'
-			}
-		},
-		cookies: {},
-		request: { header: {} }
-	} as unknown as IContextAuthenticatedAuthorization
+  return {
+    // email left undefined on purpose (see file banner) — everything else is shaped exactly
+    // like a real session so nothing upstream of the Redis write would reject it first.
+    state: {
+      user: {
+        _id,
+        email: undefined,
+        refreshToken: `refresh:${randomUUID()}`,
+        familyId: FAMILY_ID,
+        // Now-ish and a 30-day cap: the rotation refuses a lineage it can read as expired long
+        // before it reaches the hSet this test is about.
+        originalLogin: `${Date.now()}`,
+        sessionCapDays: '30'
+      }
+    },
+    cookies: {},
+    request: { header: {} }
+  } as unknown as IContextAuthenticatedAuthorization
 }
 
 describe('refresh mutation catch arm against the real Redis cluster', () => {
-	it('reports, rolls back for real, and rethrows when the live client refuses to write', async () => {
-		const ctx = makeCtx()
+  it('reports, rolls back for real, and rethrows when the live client refuses to write', async () => {
+    const ctx = makeCtx()
 
-		// tryCatchRethrow() normalises every non-GraphQLError into this message — see the argument
-		// in refresh.mts for why `status`/`accessToken` are never read on this path.
-		await expect(refresh.resolve(null, {}, ctx)).rejects.toThrow('Internal Server Error')
+    // tryCatchRethrow() normalises every non-GraphQLError into this message — see the argument
+    // in refresh.mts for why `status`/`accessToken` are never read on this path.
+    await expect(refresh.resolve(null, {}, ctx)).rejects.toThrow('Internal Server Error')
 
-		// The client is still open: the rollback `del`s really ran, they did not fail alongside the
-		// write the way they would have if the connection itself had been the thing that was down.
-		expect(redisClient.isOpen).toBe(true)
-	})
+    // The client is still open: the rollback `del`s really ran, they did not fail alongside the
+    // write the way they would have if the connection itself had been the thing that was down.
+    expect(redisClient.isOpen).toBe(true)
+  })
 })
