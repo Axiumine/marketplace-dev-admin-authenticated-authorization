@@ -209,7 +209,10 @@ export default [
       parserOptions: { ecmaVersion: 'latest', sourceType: 'module' }
     },
     plugins: sharedTsBlock.plugins,
-    rules: sharedTsBlock.rules
+    // Prettier alone owns indentation (two spaces, ADR-058). The shared TS block carries `indent: ['error', 'tab']`, which
+    // `eslint-config-prettier` switches off for src/** because it is spread last; this block copies the rules without that
+    // spread, so the tab rule would fire on every two-space line in test/ and vitest.*.mts. Off, as in the other services.
+    rules: { ...sharedTsBlock.rules, indent: 'off' }
   },
   // The root-level JS config files — this file and stryker.config.mjs. The shared config's JS block
   // is scoped to `src/**/*.{js,cjs,mjs}`, and a service whose sources are all .mts has no JS under
@@ -284,18 +287,6 @@ export default [
     files: ['test/integration/**/*.mts'],
     rules: {
       'no-restricted-imports': ['error', INTEGRATION_SEED_NO_MODEL]
-    }
-  },
-  // Two-space indentation (ADR-058, superseding ADR-024 in part). `@axiumine/eslint-config-be` still
-  // ships `indent: ['error', 'tab']`, and that package is published outside these repos, so the rule is
-  // re-declared here at two spaces. Its live scope is unchanged: the shared config's trailing prettier
-  // entry switches `indent` off for src/ and the root files, and only the test/ entry above, which
-  // reuses the shared TypeScript block's rules after prettier, leaves it on. Same files here, same
-  // reason to be last in the array: it must win over that copy.
-  {
-    files: ['test/**/*.mts', 'vitest.*.mts'],
-    rules: {
-      indent: ['error', 2]
     }
   }
 ]
