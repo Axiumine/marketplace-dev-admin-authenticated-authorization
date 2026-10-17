@@ -31,7 +31,8 @@ Tier/concern split, port table, terminology, auth model live there. Not here.
 - **Do not re-inline `marketplace-common`'s authorization helpers, and do not merge the three
   `*-authenticated-authorization` services into one.** Both are decisions the user has already taken,
   against — survey and rejected alternatives in the decision doc above.
-- Tabs, not spaces — eslint + prettier both enforce. English only: identifiers, comments, fixtures,
+- Two spaces, not tabs (ADR-058) — prettier enforces it (`useTabs: false`, `tabWidth: 2`), and eslint's
+  `indent` rule repeats it for `test/` and `vitest.*.mts`. English only: identifiers, comments, fixtures,
   no exception.
 - Run `impact({target, repo: "marketplace-dev-admin-authenticated-authorization"})` before editing a
   symbol, and `detect_changes()` before committing — `repo:` is mandatory, always a `marketplace*`
