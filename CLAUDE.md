@@ -13,13 +13,12 @@ Tier/concern split, port table, terminology, auth model live there. Not here.
 | what this svc is, why so little code lives here | [`README.md`](./README.md) |
 | hook internals, gate order, node selection, mutation-gate cost | [`REPO.md`](./REPO.md) |
 | why the three authz svcs stay three | parent [`docs/decisions/authorization-service-consolidation.md`](https://github.com/Axiumine/fullstack-marketplace-blueprint/blob/main/docs/decisions/authorization-service-consolidation.md) |
-| GitNexus rules, registry name | [`AGENTS.md`](./AGENTS.md) |
 
 ## ⚠️ Hard rules
 
 - **Never commit on `main`.** Branch first: `git switch -c <type>/<slug>`. Merge = user decision alone.
   Merged → delete branch with `-d` only, never `-D`.
-- **No remote. Push-on-request** — no `git push` unless the user asked for it in that message.
+- **Push-on-request** — no `git push` unless the user asked for it in that message.
 - **Never lower a coverage or mutation threshold, and never remove a gate.** A threshold miss gets a
   missing test written, not a lowered number. Bypasses (`SKIP_QODANA=1`, `--no-verify`) are gate
   removals: use only when the user says so.
@@ -37,6 +36,3 @@ Tier/concern split, port table, terminology, auth model live there. Not here.
 - `osv-scanner.toml` ignores GHSA-vfj7-8cjw-p6xm (braces, no patched release, dev toolchain only) until 2027-01-15
   under ADR-057. The entry expires on purpose and the Scorecard Vulnerabilities check fails again then: delete
   it as soon as a patched `braces` exists, or renew it with a new date after re-reading the ADR.
-- Run `impact({target, repo: "marketplace-dev-admin-authenticated-authorization"})` before editing a
-  symbol, and `detect_changes()` before committing — `repo:` is mandatory, always a `marketplace*`
-  registry name. Full GitNexus rules: [`AGENTS.md`](./AGENTS.md).
