@@ -18,7 +18,7 @@ Tier/concern split, port table, terminology, auth model live there. Not here.
 
 - **Never commit on `main`.** Branch first: `git switch -c <type>/<slug>`. Merge = user decision alone.
   Merged → delete branch with `-d` only, never `-D`.
-- **No remote. Push-on-request** — no `git push` unless the user asked for it in that message.
+- **Push-on-request** — no `git push` unless the user asked for it in that message.
 - **Never lower a coverage or mutation threshold, and never remove a gate.** A threshold miss gets a
   missing test written, not a lowered number. Bypasses (`SKIP_QODANA=1`, `--no-verify`) are gate
   removals: use only when the user says so.
